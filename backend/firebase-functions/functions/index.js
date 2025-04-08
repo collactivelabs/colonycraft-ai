@@ -27,8 +27,13 @@ const runtimeOptions = {
 // Validate client token
 const validateToken = (token) => {
   try {
-    const secretKey = process.env.SECRET_KEY ||
-      functions.config().secrets.jwt_key;
+    // Use only the environment variable for the secret key
+    const secretKey = process.env.SECRET_KEY;
+
+    if (!secretKey) {
+      throw new Error("Secret key not configured");
+    }
+
     const decoded = jwt.verify(token, secretKey);
 
     // Check if token is expired

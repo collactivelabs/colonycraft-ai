@@ -29,7 +29,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
 
     # Use the SECRET_KEY from settings and ALGORITHM from auth
-    encoded_jwt = jwt.encode(to_encode, setting.SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
 
     return encoded_jwt, int(expire.timestamp())
 
