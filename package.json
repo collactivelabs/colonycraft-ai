@@ -1,0 +1,19 @@
+{
+    "name": "colonycraft-ai",
+    "version": "1.0.0",
+    "description": "ColonyCraft AI platform with image and text generation capabilities",
+    "scripts": {
+        "build:frontend": "cd frontend && npm run build",
+        "build:backend": "cd backend && pip install -r requirements.txt",
+        "build": "npm run build:frontend && npm run build:backend",
+        "start:frontend": "cd frontend && npm start",
+        "start:backend": "cd backend && uvicorn src.main:app --reload",
+        "dev": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+        "install:all": "npm install && cd frontend && npm install"
+    },
+    "author": "",
+    "license": "ISC",
+    "devDependencies": {
+        "concurrently": "^8.2.0"
+    }
+}

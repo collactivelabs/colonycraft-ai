@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "colonycraft-ai",
+    "development": "colonycraft-ai"
+  },
+  "targets": {},
+  "etags": {}
+}
