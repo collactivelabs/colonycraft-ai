@@ -27,8 +27,9 @@ const runtimeOptions = {
 // Validate client token
 const validateToken = (token) => {
   try {
-    // Use the same secret key as your FastAPI backend
-    const decoded = jwt.verify(token, process.env.SECRET_KEY);
+    const secretKey = process.env.SECRET_KEY ||
+      functions.config().secrets.jwt_key;
+    const decoded = jwt.verify(token, secretKey);
 
     // Check if token is expired
     const now = Math.floor(Date.now() / 1000);
