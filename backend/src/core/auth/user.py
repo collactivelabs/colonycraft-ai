@@ -47,7 +47,7 @@ async def get_current_user(
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentialss",
+        detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -58,7 +58,7 @@ async def get_current_user(
             raise credentials_exception
     except (jwt.PyJWTError, ValidationError):
         raise credentials_exception
-    print(f"payloaddddd: {payload}")
+    print(f"payload: {payload}")
     user = db.query(UserModel).filter(UserModel.email == user_email).first()
     if user is None:
         raise credentials_exception

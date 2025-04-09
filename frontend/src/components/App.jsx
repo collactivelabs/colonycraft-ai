@@ -272,6 +272,12 @@ const LLMChat = () => {
                 functionUrl = `${FIREBASE_FUNCTIONS_URL}/anthropicGenerate`;
             } else if (selectedProvider === 'openai') {
                 functionUrl = `${FIREBASE_FUNCTIONS_URL}/openaiGenerate`;
+            } else if (selectedProvider === 'ollama') {
+                functionUrl = `${FIREBASE_FUNCTIONS_URL}/ollamaGenerate`;
+            } else if (selectedProvider === 'mistral') {
+                functionUrl = `${FIREBASE_FUNCTIONS_URL}/mistralGenerate`;
+            } else if (selectedProvider === 'google') {
+                functionUrl = `${FIREBASE_FUNCTIONS_URL}/googleGenerate`;
             } else {
                 throw new Error(`Unsupported provider: ${selectedProvider}`);
             }

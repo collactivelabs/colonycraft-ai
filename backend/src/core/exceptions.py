@@ -134,6 +134,29 @@ class InvalidInputError(BaseAPIException):
             details=error_details
         )
 
+class ServiceUnavailableError(BaseAPIException):
+    """Raised when an external service is unavailable"""
+    def __init__(self, service_name: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message=f"Service {service_name} is currently unavailable",
+            status_code=503,  # Service Unavailable
+            error_code="SERVICE_UNAVAILABLE",
+            details=details or {"service_name": service_name}
+        )
+
+class LLMIntegrationError(BaseAPIException):
+    """Raised when there is an error interacting with an LLM API"""
+    def __init__(self, provider: str, message: str, status_code: int = 500, details: Optional[Dict[str, Any]] = None):
+        error_details = details or {}
+        error_details["provider"] = provider
+        
+        super().__init__(
+            message=f"Error interacting with {provider}: {message}",
+            status_code=status_code,
+            error_code="LLM_INTEGRATION_ERROR",
+            details=error_details
+        )
+
 def format_error_response(exc: BaseAPIException) -> Dict[str, Any]:
     """Format error response in a consistent structure"""
     response = {

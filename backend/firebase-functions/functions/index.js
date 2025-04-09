@@ -1,7 +1,7 @@
 const functions = require("firebase-functions/v2");
 const {onRequest} = functions.https;
 const logger = require("firebase-functions/logger");
-const {initializeApp} = require("firebase-admin/app");
+const admin = require("firebase-admin");
 const cors = require("cors")({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -11,11 +11,11 @@ const cors = require("cors")({
 const axios = require("axios");
 const jwt = require("jsonwebtoken");
 
-initializeApp();
+admin.initializeApp();
 
 // Runtime options to specify Node.js 20
 const runtimeOptions = {
-  memory: "256MiB", // Default memory
+  memory: "256MB", // Default memory
   timeoutSeconds: 60, // 60 seconds timeout
   minInstances: 0, // Scale to zero when not in use
   concurrency: 80, // Maximum concurrent executions
@@ -54,7 +54,7 @@ exports.anthropicGenerate = onRequest(
   async (req, res) => {
     return cors(req, res, async () => {
       try {
-      // Handle preflight request
+        // Handle preflight request
         if (req.method === "OPTIONS") {
           res.set("Access-Control-Allow-Origin", "*");
           res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -65,7 +65,9 @@ exports.anthropicGenerate = onRequest(
 
         // Only allow POST requests
         if (req.method !== "POST") {
-          return res.status(405).json({error: "Method not allowed. Use POST."});
+          return res.status(405).json({
+            error: "Method not allowed. Use POST.",
+          });
         }
 
         // Validate the authorization token
@@ -78,7 +80,7 @@ exports.anthropicGenerate = onRequest(
 
         const token = authHeader.split(" ")[1];
         try {
-        // Validate the token
+          // Validate the token
           const decToken = validateToken(token);
 
           // You can use decodedToken.uid to identify the user
@@ -143,8 +145,8 @@ exports.anthropicGenerate = onRequest(
         // Return appropriate error response.
         const status = error.response ? error.response.status : 500;
         const message = error.response &&
-        error.response.data &&
-        error.response.data.error ?
+          error.response.data &&
+          error.response.data.error ?
           error.response.data.error.message :
           error.message;
 
@@ -161,7 +163,7 @@ exports.openaiGenerate = onRequest(
   async (req, res) => {
     return cors(req, res, async () => {
       try {
-      // Handle preflight request
+        // Handle preflight request
         if (req.method === "OPTIONS") {
           res.set("Access-Control-Allow-Origin", "*");
           res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -173,19 +175,21 @@ exports.openaiGenerate = onRequest(
         // Only allow POST requests
         if (req.method !== "POST") {
           return res.status(405).json({
-            error: "Method not allowed. Use POST."});
+            error: "Method not allowed. Use POST.",
+          });
         }
 
         // Validate the authorization token
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith("Bearer ")) {
           return res.status(401).json({
-            error: "Missing or invalid authorization header"});
+            error: "Missing or invalid authorization header",
+          });
         }
 
         const token = authHeader.split(" ")[1];
         try {
-        // Validate the token
+          // Validate the token
           const decToken = validateToken(token);
           // You can use decodedToken.uid to identify the user
           console.log(`Request from user: ${decToken.sub}`);
@@ -199,12 +203,8 @@ exports.openaiGenerate = onRequest(
         }
 
         // Extract request data
-        const {
-          model = "gpt-4o",
-          prompt,
-          maxTokens = 1024,
-          temperature = 0.7,
-        } = req.body;
+        const {model = "gpt-4o",
+          prompt, maxTokens = 1024, temperature = 0.7} = req.body;
 
         if (!prompt) {
           return res.status(400).json({error: "Prompt is required"});
@@ -254,29 +254,218 @@ exports.openaiGenerate = onRequest(
         // Return appropriate error response
         const status = error.response ? error.response.status : 500;
         const message = error.response &&
-        error.response.data &&
-        error.response.data.error ?
+          error.response.data &&
+          error.response.data.error ?
           error.response.data.error.message :
           error.message;
 
         res.status(status).json({
           error: message,
+          details: error.message,
         });
       }
     });
   });
 
-// Get Available LLM Providers
+// Ollama LLM Function (Proxies to Backend)
+exports.ollamaGenerate = onRequest(
+  runtimeOptions, // Add runtime options here
+  async (req, res) => {
+    return cors(req, res, async () => {
+      try {
+        // Handle preflight request
+        if (req.method === "OPTIONS") {
+          res.set("Access-Control-Allow-Origin", "*");
+          res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+          res.set("Access-Control-Allow-Headers",
+            "Content-Type, Authorization"); // No X-API-Key needed for proxy
+          return res.status(204).send("");
+        }
+
+        // Only allow POST requests
+        if (req.method !== "POST") {
+          return res.status(405).json({
+            error: "Method not allowed. Use POST.",
+          });
+        }
+
+        // Validate the authorization token
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+          return res.status(401).json({
+            error: "Missing or invalid authorization header",
+          });
+        }
+
+        const token = authHeader.split(" ")[1];
+        let decodedToken;
+        try {
+          // Validate the token
+          decodedToken = validateToken(token);
+          // Log user making the request
+          logger.info(`Ollama request initiated by user: ${decodedToken.sub}`);
+        } catch (error) {
+          logger.error(`Token validation failed: ${error.message}`);
+          return res.status(401).json({error: error.message});
+        }
+
+        // Extract request data
+        const {model, prompt, options} = req.body;
+
+        if (!model) {
+          return res.status(400).json({error: "Model is required"});
+        }
+        if (!prompt) {
+          return res.status(400).json({error: "Prompt is required"});
+        }
+
+        // --- Proxy the request to the backend API ---
+        const backendApiUrl = process.env.BACKEND_API_URL ||
+          "http://localhost:8000";
+        const backendEndpoint = `${backendApiUrl}/api/v1/llm/generate`;
+
+        const backendPayload = {
+          provider: "ollama", // Specify ollama provider
+          model,
+          prompt,
+          options: options || {}, // Pass through any additional options
+        };
+
+        logger.info(`Proxying Ollama request to backend: ${backendEndpoint}`);
+
+        // Use the validated token to authenticate with the backend
+        const backendResponse = await axios.post(
+          backendEndpoint,
+          backendPayload,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`,
+            },
+          },
+        );
+
+        // Forward the backend response to the client
+        res.status(backendResponse.status).json(backendResponse.data);
+      } catch (error) {
+        logger.error("Error proxying Ollama request to backend:", error);
+
+        if (axios.isAxiosError(error) && error.response) {
+          // Forward the backend error response
+          logger.error(`Backend error response: ${error.response.status} - ` +
+            `${JSON.stringify(error.response.data)}`);
+          res.status(error.response.status).json(error.response.data);
+        } else {
+          // General server error
+          res.status(500).json({
+            error: "Error occurred while processing the Ollama request.",
+            details: error.message,
+          });
+        }
+      }
+    });
+  });
+
+// Function to handle Mistral AI generation requests
+exports.mistralGenerate = onRequest(
+  runtimeOptions,
+  async (req, res) => {
+    cors(req, res, async () => {
+      logger.info("mistralGenerate function invoked");
+      if (req.method !== "POST") {
+        res.status(405).send("Method Not Allowed");
+        return;
+      }
+
+      const authHeader = req.headers.authorization;
+      let token = null;
+      if (authHeader) {
+        const parts = authHeader.split(" ");
+        if (parts.length === 2) {
+          token = parts[1];
+        }
+      }
+
+      if (!token) {
+        logger.warn("Authorization token missing or header format incorrect");
+        res.status(401).send("Unauthorized");
+        return;
+      }
+
+      try {
+        // Verify the token
+        await admin.auth().verifyIdToken(token);
+        logger.info("Token verified successfully");
+
+        const {model, prompt, options} = req.body;
+        if (!model || !prompt) {
+          logger.warn("Missing model or prompt in request body");
+          res.status(400).send("Bad Request: Missing model or prompt");
+          return;
+        }
+
+        const backendApiUrl = process.env.BACKEND_API_URL ||
+          "http://localhost:8000";
+
+        const backendEndpoint = `${backendApiUrl}/api/v1/llm/generate`;
+        const backendPayload = {
+          provider: "mistral", // Set provider to mistral
+          model: model,
+          prompt: prompt,
+          options: options || {},
+        };
+
+        logger.info(
+          `Forwarding request to backend: ${backendEndpoint}`,
+          {token: token, payload: backendPayload},
+        );
+
+        const backendResponse = await axios.post(
+          backendEndpoint,
+          backendPayload,
+          {
+            headers: {
+              "Authorization": `Bearer ${token}`, // Forward the original token
+              "Content-Type": "application/json",
+            },
+          },
+        );
+
+        logger.info(
+          "Received response from backend",
+          {status: backendResponse.status, payload: backendResponse.data},
+        );
+        res.status(backendResponse.status).json(backendResponse.data);
+      } catch (error) {
+        logger.error("Error in mistralGenerate function:", error);
+        if (error.code === "auth/id-token-expired" ||
+          error.code === "auth/argument-error") {
+          res.status(401).send("Unauthorized: Invalid or expired token");
+        } else if (error.response) {
+          // Error from backend API
+          logger.error(
+            "Backend API error:",
+            {status: error.response.status, data: error.response.data},
+          );
+          res.status(error.response.status).json(error.response.data);
+        } else {
+          res.status(500).send("Internal Server Error");
+        }
+      }
+    });
+  });
+
+// Endpoint to list available providers and models (proxies to backend)
 exports.listProviders = onRequest(
   runtimeOptions, // Add runtime options here
-  (req, res) => {
-    return cors(req, res, () => {
-    // Handle preflight request
+  async (req, res) => {
+    return cors(req, res, async () => {
+      // Handle preflight request
       if (req.method === "OPTIONS") {
         res.set("Access-Control-Allow-Origin", "*");
-        res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+        res.set("Access-Control-Allow-Methods", "GET, OPTIONS"); // Allow GET
         res.set("Access-Control-Allow-Headers",
-          "Content-Type, Authorization, X-API-Key");
+          "Authorization"); // Only Authorization needed
         return res.status(204).send("");
       }
 
@@ -285,58 +474,173 @@ exports.listProviders = onRequest(
         return res.status(405).json({error: "Method not allowed. Use GET."});
       }
 
-      const providers = [
-        {
-          name: "anthropic",
-          models: [
-            {
-              id: "claude-3-haiku-20240307",
-              name: "Claude 3 Haiku",
-              provider: "anthropic",
-              description: "Fastest and most compact Claude model",
-            },
-            {
-              id: "claude-3-sonnet-20240229",
-              name: "Claude 3 Sonnet",
-              provider: "anthropic",
-              description: "Balanced model for most tasks",
-            },
-            {
-              id: "claude-3-opus-20240229",
-              name: "Claude 3 Opus",
-              provider: "anthropic",
-              description: "Most powerful Claude model for complex tasks",
-            },
-          ],
-        },
-        {
-          name: "openai",
-          models: [
-            {
-              id: "gpt-4o",
-              name: "GPT-4o",
-              provider: "openai",
-              description: "Most capable GPT-4o model",
-            },
-            {
-              id: "gpt-4-turbo",
-              name: "GPT-4 Turbo",
-              provider: "openai",
-              description: "More efficient version of GPT-4",
-            },
-            {
-              id: "gpt-3.5-turbo",
-              name: "GPT-3.5 Turbo",
-              provider: "openai",
-              description: "Efficient model balancing cost and capability",
-            },
-          ],
-        },
-      ];
+      // Validate the authorization token (required to access backend endpoint)
+      const authHeader = req.headers.authorization;
+      let token = null;
+      if (authHeader) {
+        const parts = authHeader.split(" ");
+        if (parts.length === 2) {
+          token = parts[1];
+        }
+      }
 
-      res.status(200).json(providers);
+      if (!token) {
+        logger.warn("Authorization token missing or header format incorrect");
+        res.status(401).send("Unauthorized");
+        return;
+      }
+
+      try {
+        const decodedToken = validateToken(token);
+        logger.info(
+          `List providers request by user: ${decodedToken.sub}`,
+          {token: token},
+        );
+      } catch (error) {
+        logger.error(
+          `Token validation failed for listProviders: ${error.message}`,
+          {token: token},
+        );
+        return res.status(401).json({error: error.message});
+      }
+
+      // --- Proxy the request to the backend API ---
+      const backendApiUrl = process.env.BACKEND_API_URL || "http://localhost:8000";
+      const backendEndpoint = `${backendApiUrl}/api/v1/llm/providers`;
+
+      logger.info(
+        `Proxying listProviders request to backend: ${backendEndpoint}`,
+        {token: token},
+      );
+
+      try {
+        const backendResponse = await axios.get(
+          backendEndpoint,
+          {
+            headers: {
+              "Authorization": `Bearer ${token}`, // Forward validated token
+            },
+          },
+        );
+        res.status(backendResponse.status).json(backendResponse.data);
+      } catch (error) {
+        logger.error("Error proxying listProviders request to backend:", error);
+        if (axios.isAxiosError(error) && error.response) {
+          logger.error(`Backend error response: ${error.response.status} - ` +
+            `${JSON.stringify(error.response.data)}`);
+          res.status(error.response.status).json(error.response.data);
+        } else {
+          res.status(500).json({
+            error: "An unexpected error occurred while listing providers.",
+            details: error.message,
+          });
+        }
+      }
     });
   });
+
+// V2 syntax for onRequest with region and runtime options
+exports.googleGenerate = onRequest(
+  {...runtimeOptions, region: "europe-west1"},
+  (req, res) => {
+    cors(req, res, async () => {
+      logger.info("googleGenerate function invoked");
+
+      // Handle preflight requests for CORS
+      if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+      }
+
+      if (req.method !== "POST") {
+        res.status(405).send("Method Not Allowed");
+        return;
+      }
+
+      // --- Authentication --- Get and verify token ---
+      const authHeader = req.headers.authorization;
+      let token = null;
+      if (authHeader) {
+        const parts = authHeader.split(" ");
+        if (parts.length === 2) {
+          token = parts[1];
+        }
+      }
+      if (!token) {
+        logger.warn("Authorization token missing or incorrect format");
+        res.status(401).send("Unauthorized: Token required");
+        return;
+      }
+      try {
+        await admin.auth().verifyIdToken(token);
+        logger.info("Token verified successfully for googleGenerate");
+      } catch (error) {
+        logger.error("Token verification failed:", error);
+        res.status(401).send("Unauthorized: Invalid token");
+        return;
+      }
+      // --- End Authentication ---
+
+      const {prompt, options} = req.body;
+
+      if (!prompt) {
+        logger.warn("googleGenerate: Missing prompt argument.");
+        res.status(400).json({error: "Prompt is required"});
+        return;
+      }
+
+      try {
+        const llmRequest = {
+          provider: "google",
+          prompt: prompt,
+          // Default model
+          model: (options && options.model) || "gemini-1.5-flash",
+          options: options || {},
+        };
+
+        logger.info(
+          `Calling backend for Google Gemini: model=${llmRequest.model}`,
+        );
+        // Use the same makeBackendRequest helper (assuming it exists and works)
+        // NOTE: makeBackendRequest was removed in a previous step,
+        // re-implementing direct call logic here for consistency
+        const backendApiUrl = process.env.BACKEND_API_URL ||
+          "http://localhost:8000";
+        const backendEndpoint = `${backendApiUrl}/api/v1/llm/generate`;
+
+        const backendResponse = await axios.post(
+          backendEndpoint,
+          llmRequest,
+          {
+            headers: {
+              "Authorization": `Bearer ${token}`, // Forward token
+              "Content-Type": "application/json",
+            },
+            timeout: 120000, // Increased timeout
+          },
+        );
+
+        logger.info("Backend response received (Google Gemini).");
+        res.status(backendResponse.status).json(backendResponse.data);
+      } catch (error) {
+        logger.error("Error in googleGenerate function:", error);
+        // Handle errors from backend or other issues
+        if (error.response) {
+          logger.error(
+            "Backend API error (Google Gemini):",
+            {status: error.response.status, data: error.response.data},
+          );
+          res.status(error.response.status).json(error.response.data);
+        } else {
+          res.status(500).json({
+            error: "Internal Server Error",
+            details: error.message || "An unexpected error occurred",
+          });
+        }
+      }
+    });
+  },
+);
 
 // Simple test function
 exports.helloWorld = onRequest((request, response) => {

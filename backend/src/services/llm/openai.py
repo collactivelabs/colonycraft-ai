@@ -10,7 +10,7 @@ class OpenAIService(BaseLLMService):
 
     def __init__(self):
         self.api_key = settings.OPENAI_API_KEY
-        self.base_url = "https://api.openai.com/v1"
+        self.base_url = settings.OPENAI_BASE_URL
         self.default_model = "gpt-4o"
 
     async def generate_response(self, prompt: str, options: Optional[Dict[str, Any]] = None) -> LLMResponse:
@@ -66,6 +66,7 @@ class OpenAIService(BaseLLMService):
     def get_available_models(self) -> List[Dict[str, Any]]:
         """Get a list of available OpenAI models"""
         return [
+            {"id": "gpt-4", "name": "GPT-4", "provider": "openai", "description": "Most capable GPT-4 model"},
             {"id": "gpt-4o", "name": "GPT-4o", "provider": "openai", "description": "Most capable GPT-4o model"},
             {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "provider": "openai", "description": "More efficient version of GPT-4"},
             {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "provider": "openai", "description": "Efficient model balancing cost and capability"}

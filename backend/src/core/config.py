@@ -23,8 +23,13 @@ class Settings(BaseSettings):
     # LLM Settings
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
+    MISTRAL_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""  # Added for Gemini
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    MISTRAL_API_BASE_URL: str = "https://api.mistral.ai/v1"
 
-    # Google Cloud
+    # Google Cloud (Separate from Gemini API Key)
     GOOGLE_APPLICATION_CREDENTIALS: str = "${HOME}/.gcloud/keys/colonycraft-api.json"
     GOOGLE_CLOUD_PROJECT: str = ""
     GOOGLE_STORAGE_BUCKET: str = ""

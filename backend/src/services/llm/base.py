@@ -31,7 +31,7 @@ class LLMServiceFactory:
         Get the LLM service for the specified provider
 
         Args:
-            provider: The LLM provider name (e.g., 'anthropic', 'openai')
+            provider: The LLM provider name (e.g., 'anthropic', 'openai', 'ollama', 'mistral', 'google')
 
         Returns:
             An instance of the appropriate LLM service
@@ -45,5 +45,14 @@ class LLMServiceFactory:
         elif provider.lower() == "openai":
             from .openai import OpenAIService
             return OpenAIService()
+        elif provider.lower() == "ollama": 
+            from .ollama import OllamaService
+            return OllamaService()
+        elif provider.lower() == "mistral": 
+            from .mistral import MistralService
+            return MistralService()
+        elif provider.lower() == "google":  
+            from .gemini import GeminiService
+            return GeminiService()
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")

@@ -5,7 +5,9 @@ from ....services.llm.base import LLMServiceFactory, LLMResponse
 from ....core.auth import get_current_user
 from ....models.user import User
 import logging
+import asyncio
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["LLM"])
 
 class LLMRequest(BaseModel):
@@ -68,10 +70,29 @@ async def list_providers(
     List all available LLM providers and their models
     """
     try:
-        providers = [
-            {"name": "anthropic", "models": LLMServiceFactory.get_service("anthropic").get_available_models()},
-            {"name": "openai", "models": LLMServiceFactory.get_service("openai").get_available_models()}
-        ]
+        # Define provider names
+        provider_names = ["anthropic", "openai", "ollama", "mistral", "google"] 
+        providers = []
+
+        for name in provider_names:
+            try:
+                # Use async get_available_models if it's async, otherwise call directly
+                service = LLMServiceFactory.get_service(name)
+                if hasattr(service, 'get_available_models') and asyncio.iscoroutinefunction(service.get_available_models):
+                    models = await service.get_available_models() 
+                elif hasattr(service, 'get_available_models'):
+                    models = service.get_available_models() 
+                else:
+                    models = [] 
+                    logger.warning(f"Provider {name} service missing get_available_models method.")
+                
+                providers.append({"name": name, "models": models})
+            except ValueError: 
+                logger.warning(f"Provider {name} not supported by factory.")
+            except Exception as provider_err:
+                logger.error(f"Error fetching models for provider {name}: {provider_err}")
+                providers.append({"name": name, "models": []})
+
         return providers
     except Exception as e:
         logger.error(f"Error listing providers: {str(e)}")

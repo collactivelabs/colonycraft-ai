@@ -5,9 +5,9 @@
 ### LLM Integration
 - [x] Integrate OpenAI GPT models
 - [x] Integrate Anthropic Claude models
-- [ ] Add Ollama support for open-source models
-- [ ] Add Mistral AI integration
-- [ ] Add Google Gemini model support
+- [x] Add Ollama support for open-source models
+- [x] Add Mistral AI integration
+- [x] Add Google Gemini model support
 - [ ] Support model fine-tuning
 
 ### Authentication and User Management
