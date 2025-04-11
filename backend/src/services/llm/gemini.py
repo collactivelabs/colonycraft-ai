@@ -136,7 +136,7 @@ class GeminiService(BaseLLMService):
                 },
                 metadata={
                     "finish_reason": finish_reason,
-                    "safety_ratings": [rating.to_dict() for rating in candidate.safety_ratings] if candidate.safety_ratings else [],
+                    "safety_ratings": [{"category": rating.category.name, "probability": rating.probability.name} for rating in candidate.safety_ratings] if candidate.safety_ratings else [],
                     "usage": usage_metadata,
                     "id": response._result.request_id if hasattr(response._result, 'request_id') else None # Attempt to get some ID
                 }

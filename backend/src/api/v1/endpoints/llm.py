@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 from ....services.llm.base import LLMServiceFactory, LLMResponse
 from ....core.auth import get_current_user
 from ....models.user import User
+from ....core.optimizations.request_batching import batch_requests
+from ....core.optimizations.circuit_breaker import CircuitOpenError
 import logging
 import asyncio
 
@@ -35,6 +37,7 @@ async def generate_response(
         # Add any user-specific options or limitations
         options = request.options.copy() if request.options else {}
         options["user_id"] = str(current_user.id)
+        options["model"] = request.model
 
         # Log the request
         logger.info(
@@ -45,7 +48,7 @@ async def generate_response(
         # Generate response
         response = await service.generate_response(
             prompt=request.prompt,
-            options={**options, "model": request.model}
+            options=options
         )
 
         # Log response stats
@@ -56,6 +59,12 @@ async def generate_response(
         )
 
         return response
+    except CircuitOpenError as e:
+        logger.warning(f"Circuit breaker open: {str(e)}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Service temporarily unavailable: {str(e)}"
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -74,9 +83,9 @@ async def list_providers(
         provider_names = ["anthropic", "openai", "ollama", "mistral", "google"] 
         providers = []
 
-        for name in provider_names:
+        # Use asyncio.gather to fetch all models concurrently
+        async def get_provider_info(name):
             try:
-                # Use async get_available_models if it's async, otherwise call directly
                 service = LLMServiceFactory.get_service(name)
                 if hasattr(service, 'get_available_models') and asyncio.iscoroutinefunction(service.get_available_models):
                     models = await service.get_available_models() 
@@ -86,14 +95,17 @@ async def list_providers(
                     models = [] 
                     logger.warning(f"Provider {name} service missing get_available_models method.")
                 
-                providers.append({"name": name, "models": models})
-            except ValueError: 
-                logger.warning(f"Provider {name} not supported by factory.")
-            except Exception as provider_err:
-                logger.error(f"Error fetching models for provider {name}: {provider_err}")
-                providers.append({"name": name, "models": []})
-
-        return providers
+                return {"name": name, "models": models}
+            except Exception as e:
+                logger.error(f"Error fetching models for provider {name}: {e}")
+                return {"name": name, "models": []}
+        
+        # Execute all provider info fetches concurrently
+        provider_results = await asyncio.gather(*[
+            get_provider_info(name) for name in provider_names
+        ])
+        
+        return provider_results
     except Exception as e:
         logger.error(f"Error listing providers: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error listing providers: {str(e)}")

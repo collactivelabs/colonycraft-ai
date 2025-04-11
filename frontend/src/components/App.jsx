@@ -5,132 +5,13 @@ import '../styles/App.css';
 import AuthContainer from './auth/AuthContainer';
 import Header from './layout/Header';
 import Footer from './layout/Footer';
+import ThemeToggle from './ui/ThemeToggle';
+import ConversationManager from './conversation/ConversationManager';
+import ChatInterface from './conversation/ChatInterface';
+import { showExportDialog } from '../utils/exportConversation';
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
 const FIREBASE_FUNCTIONS_URL = process.env.REACT_APP_FIREBASE_FUNCTIONS_URL;
-
-const ModelSelector = ({
-    providers,
-    selectedProvider,
-    selectedModel,
-    onProviderChange,
-    onModelChange,
-    loading
-}) => {
-    return (
-        <div className="model-selector">
-            <div className="select-group">
-                <label htmlFor="provider-select">Provider:</label>
-                <select
-                    id="provider-select"
-                    value={selectedProvider}
-                    onChange={(e) => onProviderChange(e.target.value)}
-                    disabled={loading}
-                >
-                    <option value="">Select Provider</option>
-                    {providers.map(provider => (
-                        <option key={provider.name} value={provider.name}>
-                            {provider.name}
-                        </option>
-                    ))}
-                </select>
-            </div>
-
-            <div className="select-group">
-                <label htmlFor="model-select">Model:</label>
-                <select
-                    id="model-select"
-                    value={selectedModel}
-                    onChange={(e) => onModelChange(e.target.value)}
-                    disabled={!selectedProvider || loading}
-                >
-                    <option value="">Select Model</option>
-                    {selectedProvider &&
-                        providers
-                            .find(p => p.name === selectedProvider)?.models
-                            .map(model => (
-                                <option key={model.id} value={model.id}>
-                                    {model.name}
-                                </option>
-                            ))
-                    }
-                </select>
-            </div>
-        </div>
-    );
-};
-
-const PromptInput = ({ prompt, setPrompt, loading, onGenerateResponse, canSubmit }) => {
-    return (
-        <div className="prompt-area">
-            <textarea
-                placeholder="Enter your prompt here..."
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                disabled={loading}
-                rows={5}
-            />
-
-            <button
-                className="generate-btn"
-                onClick={onGenerateResponse}
-                disabled={loading || !canSubmit}
-            >
-                {loading ? (
-                    <>
-                        <span className="loading-spinner"></span>
-                        Generating...
-                    </>
-                ) : (
-                    'Generate Response'
-                )}
-            </button>
-        </div>
-    );
-};
-
-const ResponseDisplay = ({ response }) => {
-    if (!response) return null;
-
-    return (
-        <div className="response-area">
-            <h3>Response</h3>
-            <div className="model-info">
-                <span className="provider-badge" data-provider={response.model_info.provider}>
-                    {response.model_info.provider}
-                </span>
-                <span className="model-badge">
-                    {response.model_info.model}
-                </span>
-            </div>
-
-            <div className="response-content">
-                {response.text}
-            </div>
-
-            <div className="response-stats">
-                {response.metadata.usage && (
-                    <div className="token-info">
-                        <div className="token-count">
-                            <span className="token-label">Input:</span>
-                            <span className="token-value">{response.metadata.usage.input_tokens}</span>
-                        </div>
-                        <div className="token-count">
-                            <span className="token-label">Output:</span>
-                            <span className="token-value">{response.metadata.usage.output_tokens}</span>
-                        </div>
-                        <div className="token-count">
-                            <span className="token-label">Total:</span>
-                            <span className="token-value">
-                                {response.metadata.usage.input_tokens + response.metadata.usage.output_tokens}
-                            </span>
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
 
 const LLMChat = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -139,8 +20,6 @@ const LLMChat = () => {
     const [providers, setProviders] = useState([]);
     const [selectedProvider, setSelectedProvider] = useState('');
     const [selectedModel, setSelectedModel] = useState('');
-    const [prompt, setPrompt] = useState('');
-    const [response, setResponse] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -167,8 +46,7 @@ const LLMChat = () => {
         setProviders([]);
         setSelectedProvider('');
         setSelectedModel('');
-        setResponse(null);
-    },[]);
+    }, []);
 
     // Fetch client token from API
     const fetchClientToken = useCallback(async () => {
@@ -233,7 +111,7 @@ const LLMChat = () => {
                 handleLogout();
             }
         }
-    }, [clientToken, handleLogout, setSelectedModel, setSelectedProvider]);
+    }, [clientToken, handleLogout]);
 
     // Check if token is valid or needs refresh
     const ensureValidToken = async () => {
@@ -248,10 +126,10 @@ const LLMChat = () => {
     };
 
     // Generate response using Firebase Functions
-    const generateResponse = async () => {
+    const generateResponse = async (prompt) => {
         if (!prompt.trim() || !selectedProvider || !selectedModel) {
             setError('Please enter a prompt and select a model.');
-            return;
+            return null;
         }
 
         setLoading(true);
@@ -263,7 +141,7 @@ const LLMChat = () => {
 
             if (!token) {
                 setLoading(false);
-                return;
+                return null;
             }
 
             // Call the appropriate Firebase function based on the provider
@@ -304,9 +182,8 @@ const LLMChat = () => {
                     }
                 };
 
-                setResponse(mockResponse);
                 setLoading(false);
-                return;
+                return mockResponse;
             }
 
             // Make the request to Firebase Function
@@ -327,7 +204,8 @@ const LLMChat = () => {
                 }
             );
 
-            setResponse(response.data);
+            setLoading(false);
+            return response.data;
         } catch (err) {
             console.error('Error generating response:', err);
             setError(err.response?.data?.error || 'Failed to generate response.');
@@ -336,8 +214,9 @@ const LLMChat = () => {
             if (err.response?.status === 401) {
                 handleLogout();
             }
-        } finally {
+            
             setLoading(false);
+            throw err;
         }
     };
 
@@ -351,6 +230,31 @@ const LLMChat = () => {
         } else {
             setSelectedModel('');
         }
+    };
+
+    // Handle conversation management
+    const [currentConversation, setCurrentConversation] = useState(null);
+    
+    // Handle loading a saved conversation
+    const handleLoadConversation = (conversation) => {
+        setCurrentConversation(conversation);
+        
+        // Set provider and model if available
+        if (conversation.model_info) {
+            setSelectedProvider(conversation.model_info.provider);
+            setSelectedModel(conversation.model_info.model);
+        }
+    };
+
+    // Handle saving a conversation
+    const handleSaveConversation = (savedConversation) => {
+        // This is handled by the ConversationManager component
+        console.log('Conversation saved:', savedConversation.id);
+    };
+
+    // Handle exporting a conversation
+    const handleExportConversation = (conversation) => {
+        showExportDialog(conversation);
     };
 
     // Initialize providers when authenticated
@@ -393,16 +297,17 @@ const LLMChat = () => {
             <header className="app-header">
                 <div className="header-container">
                     <div className="logo">
-                        <h1>Colony<span>Craft</span></h1>
+                        <h1>Colony<span>Craft</span> AI</h1>
                     </div>
                     <nav className="main-nav">
                         <ul>
                             <li><a href="/" className="active">Home</a></li>
                             <li><a href="/about">About</a></li>
                             <li><a href="/contact">Contact</a></li>
-                            <li><a href="#" onClick={(e) => { e.preventDefault(); handleLogout(); }} className="logout-link">Logout</a></li>
+                            <li><button type="button" onClick={(e) => { e.preventDefault(); handleLogout(); }} className="logout-link">Logout</button></li>
                         </ul>
                     </nav>
+                    <ThemeToggle />
                 </div>
             </header>
 
@@ -410,31 +315,23 @@ const LLMChat = () => {
                 <div className="llm-chat-container">
                     <h2>AI Chat Assistant</h2>
 
-                    {error && (
-                        <div className="error-message">
-                            <span className="error-icon">!</span>
-                            {error}
-                        </div>
-                    )}
+                    <ConversationManager 
+                        currentConversation={currentConversation}
+                        onLoadConversation={handleLoadConversation}
+                        onSaveConversation={handleSaveConversation}
+                        onExportConversation={handleExportConversation}
+                    />
 
-                    <ModelSelector
+                    <ChatInterface 
                         providers={providers}
                         selectedProvider={selectedProvider}
                         selectedModel={selectedModel}
                         onProviderChange={handleProviderChange}
                         onModelChange={setSelectedModel}
-                        loading={loading}
-                    />
-
-                    <PromptInput
-                        prompt={prompt}
-                        setPrompt={setPrompt}
-                        loading={loading}
                         onGenerateResponse={generateResponse}
-                        canSubmit={prompt.trim() && selectedModel}
+                        loading={loading}
+                        error={error}
                     />
-
-                    <ResponseDisplay response={response} />
                 </div>
             </main>
 

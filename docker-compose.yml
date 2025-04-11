@@ -42,6 +42,13 @@ services:
       #- DATABASE_URL=postgresql://colonyCraft_apiUser:${POSTGRES_PASSWORD}@db/${POSTGRES_DB} # Define full URL in .env.docker
       #- REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - CACHE_ENABLED=true
+      - DB_POOL_SIZE=20
+      - DB_POOL_MAX_OVERFLOW=10
+      - REDIS_POOL_SIZE=50
+      - PYTHONPATH=/app
     depends_on:
       #ollama-init:
       #  condition: service_completed_successfully
@@ -52,6 +59,63 @@ services:
         condition: service_started
       redis:
         condition: service_started
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A src.core.celery.celery_app worker --loglevel=info
+    environment:
+      - ENVIRONMENT=development
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DATABASE_URL=postgresql://colonyCraft_apiUser:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - PYTHONPATH=/app
+    depends_on:
+      - backend
+      - redis
+      - db
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A src.core.celery.celery_app beat --loglevel=info
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql://colonyCraft_apiUser:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - PYTHONPATH=/app
+    depends_on:
+      - celery-worker
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  flower:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A src.core.celery.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - ENVIRONMENT=development
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+      - PYTHONPATH=/app
+    depends_on:
+      - celery-worker
     volumes:
       - ./backend:/app
     restart: unless-stopped
@@ -86,7 +150,7 @@ services:
   redis:
     image: redis:alpine
     #command: redis-server --requirepass "${REDIS_PASSWORD}"
-    command: redis-server
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     restart: unless-stopped

@@ -39,12 +39,23 @@ class Settings(BaseSettings):
     RATE_LIMIT_WINDOW: int = 60
     RATE_LIMIT_MAX_REQUESTS: int = 100
 
+    # Caching
+    CACHE_ENABLED: bool = True  # Toggle caching on/off globally
+    CACHE_DEFAULT_TTL: int = 3600  # Default cache TTL in seconds (1 hour)
+    CACHE_MAX_SIZE: int = 10000  # Maximum number of cache entries
+
     # Database
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_USER: str = "colonyCraft_apiUser"
     POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = "colonycraft_api"
     DATABASE_URL: str = ""
+    
+    # Database Connection Pooling
+    DB_POOL_SIZE: int = 20  # Number of connections to keep open
+    DB_POOL_MAX_OVERFLOW: int = 10  # Maximum number of extra connections 
+    DB_POOL_TIMEOUT: int = 30  # Seconds to wait for a connection
+    DB_POOL_RECYCLE: int = 3600  # Recycle connections after 1 hour
 
     # Redis
     REDIS_HOST: str = "localhost"
@@ -52,10 +63,19 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
     REDIS_PASSWORD: str = ""
     REDIS_URL: str = ""
+    
+    # Redis Connection Pooling
+    REDIS_POOL_SIZE: int = 50  # Maximum number of Redis connections
 
     # Celery
     CELERY_BROKER_URL: str = ""
     CELERY_RESULT_BACKEND: str = ""
+    CELERY_TASK_QUEUES: List[str] = ["default", "maintenance", "caching", "scheduled", "metrics"]
+    CELERY_TASK_DEFAULT_QUEUE: str = "default"
+    
+    # Circuit Breaker Settings
+    CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = 5  # Number of failures before opening
+    CIRCUIT_BREAKER_RECOVERY_TIMEOUT: int = 30  # Seconds to wait before trying again
 
     # Services
     STABLE_DIFFUSION_MODEL: str = "stabilityai/stable-diffusion-2-1"

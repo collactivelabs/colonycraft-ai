@@ -10,6 +10,7 @@ from .api.v1.endpoints.image import router as image_router
 from .api.v1.endpoints.video import router as video_router
 from .api.v1.endpoints.files import router as files_router
 from .api.v1.endpoints.llm import router as llm_router
+from .api.v1.endpoints.fine_tuning import router as fine_tuning_router
 from .api.v1.api_keys import router as api_keys_router
 from .routers.api_key_management import router as api_key_management_router
 from .core.database import engine, Base
@@ -28,14 +29,39 @@ from .core.auth import RequestContextMiddleware
 from .core.metrics import PrometheusMiddleware
 from .core.security import SecurityHeadersMiddleware
 from .core.config import get_settings
+from .core.celery import celery_app, test_task
+from .core.optimizations.connection_pooling import get_db_pool, get_redis_pool
+
+# Initialize Celery and optimizations
+settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Setup - runs at startup
     import threading
     from .tasks.api_key_notifications import start_api_key_check_background_task
-
-    # Run in a separate thread to not block the main thread
+    
+    # Initialize database connection pool
+    get_db_pool(
+        pool_size=settings.DB_POOL_SIZE if hasattr(settings, 'DB_POOL_SIZE') else 20,
+        max_overflow=settings.DB_POOL_MAX_OVERFLOW if hasattr(settings, 'DB_POOL_MAX_OVERFLOW') else 10
+    )
+    
+    # Initialize Redis connection pool
+    get_redis_pool(
+        max_connections=settings.REDIS_POOL_SIZE if hasattr(settings, 'REDIS_POOL_SIZE') else 50
+    )
+    
+    # Initialize Celery test task to check connection
+    if settings.ENVIRONMENT != "test":
+        try:
+            result = test_task.delay("Startup")
+            result.get(timeout=5)  # Wait for result with 5s timeout
+            print("Celery connection successful!")
+        except Exception as e:
+            print(f"Warning: Celery test failed: {str(e)}")
+    
+    # Run API key check in a separate thread to not block the main thread
     task_thread = threading.Thread(
         target=start_api_key_check_background_task,
         daemon=True
@@ -144,6 +170,7 @@ def create_app() -> FastAPI:
     app.include_router(video_router, prefix="/api/v1")
     app.include_router(files_router, prefix="/api/v1")
     app.include_router(llm_router, prefix="/api/v1/llm", tags=["LLM"])
+    app.include_router(fine_tuning_router, prefix="/api/v1/fine-tuning", tags=["Fine-Tuning"])
     app.include_router(api_keys_router, prefix="/api/v1/api-keys", tags=["API Keys"])
     app.include_router(api_key_management_router, prefix="/api/v1", tags=["API Key Management"])
 
@@ -175,6 +202,22 @@ def create_app() -> FastAPI:
             "allowed_origins": settings.ALLOWED_ORIGINS,
             "type": str(type(settings.ALLOWED_ORIGINS))
         }
+
+    @app.get("/debug/celery")
+    async def debug_celery():
+        """Test Celery connection"""
+        try:
+            result = test_task.delay("API")
+            return {
+                "status": "ok",
+                "result": result.get(timeout=5),
+                "task_id": result.id
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": str(e)
+            }
 
     # Root endpoint
 

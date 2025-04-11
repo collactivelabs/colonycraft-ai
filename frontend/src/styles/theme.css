@@ -1,0 +1,69 @@
+:root {
+  /* Light theme variables */
+  --primary-color: #3a86ff;
+  --secondary-color: #8338ec;
+  --accent-color: #ff006e;
+  --background-color: #ffffff;
+  --card-background: #f8f9fa;
+  --text-color: #212529;
+  --text-secondary: #6c757d;
+  --border-color: #dee2e6;
+  --input-bg: #f8f9fa;
+  --toggle-bg: #e9ecef;
+  --toggle-hover-bg: #dee2e6;
+  --button-primary-bg: #3a86ff;
+  --button-primary-text: #ffffff;
+  --button-secondary-bg: #e9ecef;
+  --button-secondary-text: #212529;
+  --header-bg: #f8f9fa;
+  --footer-bg: #f8f9fa;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --code-bg: #f1f3f5;
+  --provider-badge-bg: rgba(58, 134, 255, 0.2);
+  --model-badge-bg: rgba(131, 56, 236, 0.2);
+  --error-color: #dc3545;
+  --success-color: #28a745;
+  --warning-color: #ffc107;
+  --info-color: #17a2b8;
+}
+
+/* Dark theme variables */
+html.dark-theme {
+  --primary-color: #4dabf7;
+  --secondary-color: #be95ff;
+  --accent-color: #ff5c8d;
+  --background-color: #212529;
+  --card-background: #343a40;
+  --text-color: #f8f9fa;
+  --text-secondary: #adb5bd;
+  --border-color: #495057;
+  --input-bg: #343a40;
+  --toggle-bg: #495057;
+  --toggle-hover-bg: #6c757d;
+  --button-primary-bg: #4dabf7;
+  --button-primary-text: #212529;
+  --button-secondary-bg: #495057;
+  --button-secondary-text: #f8f9fa;
+  --header-bg: #343a40;
+  --footer-bg: #343a40;
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --code-bg: #2b3035;
+  --provider-badge-bg: rgba(77, 171, 247, 0.2);
+  --model-badge-bg: rgba(190, 149, 255, 0.2);
+  --error-color: #f06161;
+  --success-color: #51cf66;
+  --warning-color: #ffd43b;
+  --info-color: #22b8cf;
+}
+
+/* Apply theme to body */
+body {
+  background-color: var(--background-color);
+  color: var(--text-color);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Universal transitions for smoother theme switching */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
