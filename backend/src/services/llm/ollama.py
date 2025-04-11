@@ -2,17 +2,18 @@ import httpx
 from typing import Dict, Any, List, Optional
 
 from .base import BaseLLMService, LLMResponse
-from ...core.config import settings  # Assuming settings contain OLLAMA_BASE_URL
+from ...core.config import get_settings
 from ...core.exceptions import ServiceUnavailableError, LLMIntegrationError
+import logging
 
-# Placeholder for Ollama base URL if not in settings
-DEFAULT_OLLAMA_URL = "http://localhost:11434"
+settings = get_settings()
+logger = logging.getLogger(__name__)
 
 class OllamaService(BaseLLMService):
     """Service integration for Ollama LLMs"""
 
     def __init__(self, base_url: Optional[str] = None):
-        self.base_url = base_url or getattr(settings, "OLLAMA_BASE_URL", DEFAULT_OLLAMA_URL)
+        self.base_url = getattr(settings, 'OLLAMA_BASE_URL', settings.OLLAMA_BASE_URL)
         # Use httpx.AsyncClient for async requests
         self.client = httpx.AsyncClient(base_url=self.base_url, timeout=60.0) # Increased timeout for potentially long generations
 
@@ -24,11 +25,11 @@ class OllamaService(BaseLLMService):
             return response.json()
         except httpx.HTTPStatusError as e:
             # Log the error details
-            print(f"Ollama API request failed: {e.response.status_code} - {e.response.text}")
+            logger.error(f"Ollama API request failed: {e.response.status_code} - {e.response.text}")
             raise LLMIntegrationError(f"Ollama API error: {e.response.status_code}") from e
         except httpx.RequestError as e:
             # Log the error details
-            print(f"Could not connect to Ollama: {e}")
+            logger.error(f"Could not connect to Ollama: {e}")
             raise ServiceUnavailableError(f"Could not connect to Ollama at {self.base_url}") from e
 
     async def generate_response(self, prompt: str, options: Optional[Dict[str, Any]] = None) -> LLMResponse:
@@ -36,7 +37,7 @@ class OllamaService(BaseLLMService):
         if options is None:
             options = {}
 
-        model = options.get("model", "llama3") # Default to llama3 if no model specified
+        model = options.get("model", "llama3.2") # Default to llama3.2 if no model specified
         request_payload = {
             "model": model,
             "prompt": prompt,
@@ -70,7 +71,7 @@ class OllamaService(BaseLLMService):
             raise e
         except Exception as e:
             # Log unexpected errors
-            print(f"Unexpected error during Ollama generation: {e}")
+            logger.error(f"Unexpected error during Ollama generation: {e}")
             raise LLMIntegrationError(f"Unexpected error interacting with Ollama: {str(e)}") from e
 
 
@@ -84,10 +85,10 @@ class OllamaService(BaseLLMService):
             return [{"id": model.get("name"), "name": model.get("name")} for model in models]
         except (ServiceUnavailableError, LLMIntegrationError) as e:
             # Log and return empty list or re-raise, depending on desired handling
-            print(f"Failed to get Ollama models: {e}")
+            logger.error(f"Failed to get Ollama models: {e}")
             return [] # Return empty list if models can't be fetched
         except Exception as e:
-            print(f"Unexpected error fetching Ollama models: {e}")
+            logger.error(f"Unexpected error fetching Ollama models: {e}")
             return []
 
     async def close(self):

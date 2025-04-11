@@ -1,17 +1,24 @@
 import httpx
 from typing import Dict, Any, List, Optional
 from .base import BaseLLMService, LLMResponse
+from ...core.exceptions import AuthenticationError
 from ...core.config import get_settings
+import logging
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 class AnthropicService(BaseLLMService):
     """Service for Anthropic Claude models"""
 
     def __init__(self):
-        self.api_key = settings.ANTHROPIC_API_KEY
-        self.base_url = "https://api.anthropic.com/v1"
+        self.api_key = getattr(settings, 'ANTHROPIC_API_KEY', settings.ANTHROPIC_API_KEY)
+        self.base_url = getattr(settings, 'ANTHROPIC_BASE_URL', settings.ANTHROPIC_BASE_URL)
         self.default_model = "claude-3-sonnet-20240229"
+        if not self.api_key:
+            raise AuthenticationError("Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable.")
+        if not self.base_url:
+            raise AuthenticationError("Anthropic base URL not configured. Set ANTHROPIC_BASE_URL environment variable.")
 
     async def generate_response(self, prompt: str, options: Optional[Dict[str, Any]] = None) -> LLMResponse:
         """

@@ -2,16 +2,21 @@ import httpx
 from typing import Dict, Any, List, Optional
 from .base import BaseLLMService, LLMResponse
 from ...core.config import get_settings
+from ...core.exceptions import AuthenticationError
+import logging
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 class OpenAIService(BaseLLMService):
     """Service for OpenAI models"""
 
     def __init__(self):
-        self.api_key = settings.OPENAI_API_KEY
-        self.base_url = settings.OPENAI_BASE_URL
+        self.api_key = getattr(settings, 'OPENAI_API_KEY', settings.OPENAI_API_KEY)
+        self.base_url = getattr(settings, 'OPENAI_BASE_URL', settings.OPENAI_BASE_URL)
         self.default_model = "gpt-4o"
+        if not self.api_key:
+            raise AuthenticationError("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.")
 
     async def generate_response(self, prompt: str, options: Optional[Dict[str, Any]] = None) -> LLMResponse:
         """
@@ -29,6 +34,7 @@ class OpenAIService(BaseLLMService):
         """
         options = options or {}
         model = options.get("model", self.default_model)
+        logger.info(f"OpenAI API key configured: {self.api_key}")
 
         async with httpx.AsyncClient() as client:
             response = await client.post(

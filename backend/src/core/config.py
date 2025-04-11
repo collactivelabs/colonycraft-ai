@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = secrets.token_urlsafe(32)
     SECRET_NAME: str = "colonycraft-api-key"
-    API_KEY: str = ""
+    API_KEY: str = secrets.token_urlsafe(48)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     ALLOWED_HOSTS: List[str] = '["localhost", "127.0.0.1"]'
     ALLOWED_ORIGINS: List[str] = '["http://localhost:3006", "http://127.0.0.1:3006"]'
@@ -24,9 +24,10 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     MISTRAL_API_KEY: str = ""
-    GOOGLE_API_KEY: str = ""  # Added for Gemini
+    GEMINI_API_KEY: str = ""  # Added for Gemini
+    ANTHROPIC_BASE_URL: str = "https://api.anthropic.com/v1"
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_BASE_URL: str = "http://ollama:11434"
     MISTRAL_API_BASE_URL: str = "https://api.mistral.ai/v1"
 
     # Google Cloud (Separate from Gemini API Key)

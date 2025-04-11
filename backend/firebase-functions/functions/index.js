@@ -22,6 +22,7 @@ const runtimeOptions = {
   cpu: 1, // CPU allocation
   region: "us-central1", // Region
   runtime: "nodejs20", // Using Node.js 20
+  invoker: "public",
 };
 
 // Validate client token
@@ -155,7 +156,8 @@ exports.anthropicGenerate = onRequest(
         });
       }
     });
-  });
+  },
+);
 
 // OpenAI LLM Function
 exports.openaiGenerate = onRequest(
@@ -265,11 +267,12 @@ exports.openaiGenerate = onRequest(
         });
       }
     });
-  });
+  },
+);
 
 // Ollama LLM Function (Proxies to Backend)
 exports.ollamaGenerate = onRequest(
-  runtimeOptions, // Add runtime options here
+  runtimeOptions,
   async (req, res) => {
     return cors(req, res, async () => {
       try {
@@ -298,12 +301,12 @@ exports.ollamaGenerate = onRequest(
         }
 
         const token = authHeader.split(" ")[1];
-        let decodedToken;
         try {
           // Validate the token
-          decodedToken = validateToken(token);
+          const decodedToken = validateToken(token);
           // Log user making the request
           logger.info(`Ollama request initiated by user: ${decodedToken.sub}`);
+          logger.info("Token verified successfully for ollamaGenerate");
         } catch (error) {
           logger.error(`Token validation failed: ${error.message}`);
           return res.status(401).json({error: error.message});
@@ -364,7 +367,8 @@ exports.ollamaGenerate = onRequest(
         }
       }
     });
-  });
+  },
+);
 
 // Function to handle Mistral AI generation requests
 exports.mistralGenerate = onRequest(
@@ -372,9 +376,21 @@ exports.mistralGenerate = onRequest(
   async (req, res) => {
     cors(req, res, async () => {
       logger.info("mistralGenerate function invoked");
+
+      // Handle preflight request
+      if (req.method === "OPTIONS") {
+        res.set("Access-Control-Allow-Origin", "*");
+        res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+        res.set("Access-Control-Allow-Headers",
+          "Content-Type, Authorization, X-API-Key");
+        return res.status(204).send("");
+      }
+
+      // Only allow POST requests
       if (req.method !== "POST") {
-        res.status(405).send("Method Not Allowed");
-        return;
+        return res.status(405).json({
+          error: "Method not allowed. Use POST.",
+        });
       }
 
       const authHeader = req.headers.authorization;
@@ -394,9 +410,18 @@ exports.mistralGenerate = onRequest(
 
       try {
         // Verify the token
-        await admin.auth().verifyIdToken(token);
-        logger.info("Token verified successfully");
+        try {
+          // Validate the token
+          const decodedToken = validateToken(token);
+          // Log user making the request
+          logger.info(`Mistral request initiated by user: ${decodedToken.sub}`);
+          logger.info("Token verified successfully for mistralGenerate");
+        } catch (error) {
+          logger.error(`Token validation failed: ${error.message}`);
+          return res.status(401).json({error: error.message});
+        }
 
+        // Extract request data
         const {model, prompt, options} = req.body;
         if (!model || !prompt) {
           logger.warn("Missing model or prompt in request body");
@@ -453,7 +478,129 @@ exports.mistralGenerate = onRequest(
         }
       }
     });
-  });
+  },
+);
+
+// V2 syntax for onRequest with region and runtime options
+exports.googleGenerate = onRequest(
+  runtimeOptions,
+  (req, res) => {
+    cors(req, res, async () => {
+      logger.info("googleGenerate function invoked");
+
+      // Handle preflight request
+      if (req.method === "OPTIONS") {
+        res.set("Access-Control-Allow-Origin", "*");
+        res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+        res.set("Access-Control-Allow-Headers",
+          "Content-Type, Authorization, X-API-Key");
+        return res.status(204).send("");
+      }
+
+      // Only allow POST requests
+      if (req.method !== "POST") {
+        return res.status(405).json({
+          error: "Method not allowed. Use POST.",
+        });
+      }
+
+      // --- Authentication --- Get and verify token ---
+      const authHeader = req.headers.authorization;
+      let token = null;
+      if (authHeader) {
+        const parts = authHeader.split(" ");
+        if (parts.length === 2) {
+          token = parts[1];
+        }
+      }
+      if (!token) {
+        logger.warn("Authorization token missing or incorrect format");
+        res.status(401).send("Unauthorized: Token required");
+        return;
+      }
+
+      // Validate token
+      try {
+        // Validate the token
+        const decodedToken = validateToken(token);
+        // Log user making the request
+        logger.info(
+          `Google Gemini request initiated by user: ${decodedToken.sub}`,
+        );
+        logger.info("Token verified successfully for googleGenerate");
+      } catch (error) {
+        logger.error(`Token validation failed: ${error.message}`);
+        return res.status(401).json({error: error.message});
+      }
+      // --- End Authentication ---
+
+      const {prompt, options} = req.body;
+
+      if (!prompt) {
+        logger.warn("googleGenerate: Missing prompt argument.");
+        res.status(400).json({error: "Prompt is required"});
+        return;
+      }
+
+      // Get API key from environment variables
+      const apiKey = process.env.GEMINI_API_KEY;
+      logger.info(`GEMINI API key: ${apiKey}`);
+      if (!apiKey) {
+        return res.status(500).json({error: "API key not configured"});
+      }
+
+      try {
+        const llmRequest = {
+          provider: "google",
+          prompt: prompt,
+          // Default model
+          model: (options && options.model) || "gemini-1.5-flash",
+          options: options || {},
+        };
+
+        logger.info(
+          `Calling backend for Google Gemini: model=${llmRequest.model}`,
+        );
+        // Use the same makeBackendRequest helper (assuming it exists and works)
+        // NOTE: makeBackendRequest was removed in a previous step,
+        // re-implementing direct call logic here for consistency
+        const backendApiUrl = process.env.BACKEND_API_URL ||
+          "http://localhost:8000";
+        const backendEndpoint = `${backendApiUrl}/api/v1/llm/generate`;
+
+        const backendResponse = await axios.post(
+          backendEndpoint,
+          llmRequest,
+          {
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            timeout: 120000, // Increased timeout
+          },
+        );
+
+        logger.info("Backend response received (Google Gemini).");
+        res.status(backendResponse.status).json(backendResponse.data);
+      } catch (error) {
+        logger.error("Error in googleGenerate function:", error);
+        // Handle errors from backend or other issues
+        if (error.response) {
+          logger.error(
+            "Backend API error (Google Gemini):",
+            {status: error.response.status, data: error.response.data},
+          );
+          res.status(error.response.status).json(error.response.data);
+        } else {
+          res.status(500).json({
+            error: "Internal Server Error",
+            details: error.message || "An unexpected error occurred",
+          });
+        }
+      }
+    });
+  },
+);
 
 // Endpoint to list available providers and models (proxies to backend)
 exports.listProviders = onRequest(
@@ -533,108 +680,6 @@ exports.listProviders = onRequest(
           res.status(500).json({
             error: "An unexpected error occurred while listing providers.",
             details: error.message,
-          });
-        }
-      }
-    });
-  });
-
-// V2 syntax for onRequest with region and runtime options
-exports.googleGenerate = onRequest(
-  {...runtimeOptions, region: "europe-west1"},
-  (req, res) => {
-    cors(req, res, async () => {
-      logger.info("googleGenerate function invoked");
-
-      // Handle preflight requests for CORS
-      if (req.method === "OPTIONS") {
-        res.status(204).send("");
-        return;
-      }
-
-      if (req.method !== "POST") {
-        res.status(405).send("Method Not Allowed");
-        return;
-      }
-
-      // --- Authentication --- Get and verify token ---
-      const authHeader = req.headers.authorization;
-      let token = null;
-      if (authHeader) {
-        const parts = authHeader.split(" ");
-        if (parts.length === 2) {
-          token = parts[1];
-        }
-      }
-      if (!token) {
-        logger.warn("Authorization token missing or incorrect format");
-        res.status(401).send("Unauthorized: Token required");
-        return;
-      }
-      try {
-        await admin.auth().verifyIdToken(token);
-        logger.info("Token verified successfully for googleGenerate");
-      } catch (error) {
-        logger.error("Token verification failed:", error);
-        res.status(401).send("Unauthorized: Invalid token");
-        return;
-      }
-      // --- End Authentication ---
-
-      const {prompt, options} = req.body;
-
-      if (!prompt) {
-        logger.warn("googleGenerate: Missing prompt argument.");
-        res.status(400).json({error: "Prompt is required"});
-        return;
-      }
-
-      try {
-        const llmRequest = {
-          provider: "google",
-          prompt: prompt,
-          // Default model
-          model: (options && options.model) || "gemini-1.5-flash",
-          options: options || {},
-        };
-
-        logger.info(
-          `Calling backend for Google Gemini: model=${llmRequest.model}`,
-        );
-        // Use the same makeBackendRequest helper (assuming it exists and works)
-        // NOTE: makeBackendRequest was removed in a previous step,
-        // re-implementing direct call logic here for consistency
-        const backendApiUrl = process.env.BACKEND_API_URL ||
-          "http://localhost:8000";
-        const backendEndpoint = `${backendApiUrl}/api/v1/llm/generate`;
-
-        const backendResponse = await axios.post(
-          backendEndpoint,
-          llmRequest,
-          {
-            headers: {
-              "Authorization": `Bearer ${token}`, // Forward token
-              "Content-Type": "application/json",
-            },
-            timeout: 120000, // Increased timeout
-          },
-        );
-
-        logger.info("Backend response received (Google Gemini).");
-        res.status(backendResponse.status).json(backendResponse.data);
-      } catch (error) {
-        logger.error("Error in googleGenerate function:", error);
-        // Handle errors from backend or other issues
-        if (error.response) {
-          logger.error(
-            "Backend API error (Google Gemini):",
-            {status: error.response.status, data: error.response.data},
-          );
-          res.status(error.response.status).json(error.response.data);
-        } else {
-          res.status(500).json({
-            error: "Internal Server Error",
-            details: error.message || "An unexpected error occurred",
           });
         }
       }

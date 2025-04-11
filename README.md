@@ -82,7 +82,10 @@ The project consists of three main components:
    ```
    SECRET_KEY=<your_secret_key>
    OPENAI_API_KEY=<your_openai_api_key>
+   MISTRAL_API_KEY=<your_mistral_api_key>
+   GEMINI_API_KEY=<your_gemini_api_key>
    ANTHROPIC_API_KEY=<your_anthropic_api_key>
+   ANTHROPIC_BASE_URL=<your_anthropic_base_url>
    ```
 
 5. Deploy functions:

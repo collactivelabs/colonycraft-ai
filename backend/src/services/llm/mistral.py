@@ -4,19 +4,23 @@ from typing import Optional, Dict, Any, List
 from ...core.config import get_settings
 from .base import BaseLLMService, LLMResponse
 from ...core.exceptions import ServiceUnavailableError, LLMIntegrationError, AuthenticationError
+import logging
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 class MistralService(BaseLLMService):
     """Service integration for Mistral AI LLMs"""
 
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or getattr(settings, "MISTRAL_API_KEY", settings.MISTRAL_API_KEY)
+        self.api_key = getattr(settings, 'MISTRAL_API_KEY', settings.MISTRAL_API_KEY)
+        self.base_url = getattr(settings, 'MISTRAL_API_BASE_URL', settings.MISTRAL_API_BASE_URL)
+
         if not self.api_key:
             raise AuthenticationError("Mistral API key not configured. Set MISTRAL_API_KEY environment variable.")
 
         self.client = httpx.AsyncClient(
-            base_url=settings.MISTRAL_API_BASE_URL,
+            base_url=self.base_url,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
@@ -64,6 +68,8 @@ class MistralService(BaseLLMService):
 
         # Remove None values from payload as Mistral API might not like them
         request_payload = {k: v for k, v in request_payload.items() if v is not None}
+
+        logger.info(f"Mistral payload configured: {request_payload}")
 
         try:
             mistral_response = await self._make_request(

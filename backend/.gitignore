@@ -58,7 +58,7 @@ build/Release
 !.env.example
 
 # Credentials
-#*.json
+*.json
 !package.json
 !tsconfig.json
 .gcloud/

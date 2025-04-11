@@ -1,18 +1,57 @@
 services:
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - /Users/englarmerdgemongwe/.ollama:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags", "||", "exit", "0"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+  ollama-init:
+    image: curlimages/curl:latest
+    depends_on:
+      ollama:
+        condition: service_started
+    command: >
+      sh -c "
+        echo 'Waiting for Ollama to be ready...' &&
+        sleep 5 &&
+        echo 'Pulling llama3.2 model...' &&
+        curl -X POST http://ollama:11434/api/pull -d '{\"model\":\"llama3.2\"}' &&
+        echo 'Model pulled successfully'
+      "
+    restart: on-failure
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    env_file:
+      - ./backend/.env.docker
     environment:
       - ENVIRONMENT=development
-      - DATABASE_URL=postgresql://colonyCraft_apiUser:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      #- DATABASE_URL=postgresql://colonyCraft_apiUser:${POSTGRES_PASSWORD}@db/${POSTGRES_DB} # Define full URL in .env.docker
       #- REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
       - REDIS_URL=redis://redis:6379/0
     depends_on:
-      - db
-      - redis
+      #ollama-init:
+      #  condition: service_completed_successfully
+      # Or if you just want to ensure Ollama is running:
+      ollama:
+        condition: service_started
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
     volumes:
       - ./backend:/app
     restart: unless-stopped
@@ -24,7 +63,8 @@ services:
     ports:
       - "3006:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     restart: unless-stopped
 
   db:
@@ -36,6 +76,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U colonyCraft_apiUser -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   redis:
     image: redis:alpine
@@ -44,7 +90,13 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
+  ollama_data:
   postgres_data:
   redis_data:

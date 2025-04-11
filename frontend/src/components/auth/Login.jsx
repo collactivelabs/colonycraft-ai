@@ -53,7 +53,7 @@ const LoginForm = ({ onLoginSuccess, switchToRegister }) => {
                 setError('Invalid response from server');
             }
         } catch (err) {
-            console.error('Login error:', err.response?.data);
+            console.error('Login error:', err);
 
             // Provide a friendly error message
             setError(err.response?.data?.detail || 'Authentication failed. Please try again.');

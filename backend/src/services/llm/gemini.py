@@ -4,11 +4,10 @@ Service integration for Google Gemini models.
 import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
 from typing import Optional, Dict, Any, List
-import logging
-
-from ...core.config import get_settings
 from .base import BaseLLMService, LLMResponse
 from ...core.exceptions import AuthenticationError, ServiceUnavailableError, InvalidInputError,LLMIntegrationError
+from ...core.config import get_settings
+import logging
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -16,10 +15,10 @@ logger = logging.getLogger(__name__)
 class GeminiService(BaseLLMService):
     """Service integration for Google Gemini LLMs"""
 
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or settings.GOOGLE_API_KEY
+    def __init__(self):
+        self.api_key = getattr(settings, 'GEMINI_API_KEY', settings.GEMINI_API_KEY)
         if not self.api_key:
-            raise AuthenticationError("Google API Key not configured. Set GOOGLE_API_KEY environment variable.")
+            raise AuthenticationError("Google API Key not configured. Set GEMINI_API_KEY environment variable.")
         
         try:
             genai.configure(api_key=self.api_key)
@@ -61,7 +60,6 @@ class GeminiService(BaseLLMService):
             raise ServiceUnavailableError("google", f"Could not connect to Google API to list models: {e}")
         except Exception as e:
             raise LLMIntegrationError("google", f"An unexpected error occurred while listing Google models: {e}")
-
 
     async def generate_response(self, prompt: str, options: Optional[Dict[str, Any]] = None) -> LLMResponse:
         """Generate a response from a Gemini model."""
